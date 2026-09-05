@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FieldMesh C2</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand"><span class="mark">FM</span><div><strong>FIELDMESH</strong><small>OFFLINE C2 / AUTOMERGE POC</small></div></div>
+      <div class="network"><span id="network-dot" class="dot"></span><div><strong id="network-label">CONNECTING</strong><small id="identity">—</small></div></div>
+    </header>
+    <main>
+      <section class="panel map-panel">
+        <div class="panel-title"><span>COMMON OPERATING PICTURE</span><div class="tools"><input id="draw-color" type="color" value="#f6c344" title="Drawing color"/><button id="clear-drawings" class="quiet">CLEAR INK</button></div></div>
+        <div id="map">
+          <div class="grid"></div>
+          <canvas id="drawing-canvas"></canvas>
+          <div id="track-layer"></div>
+          <div class="map-help">DRAG TO ANNOTATE · COORDINATES ARE DEMO NORMALIZED PLOT</div>
+        </div>
+      </section>
+      <section class="panel tracks-panel">
+        <div class="panel-title"><span>FORCE TRACKS</span><span id="track-count" class="count">0</span></div>
+        <form id="track-form">
+          <input name="callsign" placeholder="Callsign" maxlength="80" required />
+          <select name="affiliation"><option value="friendly">FRIENDLY</option><option value="unknown">UNKNOWN</option><option value="hostile">HOSTILE</option></select>
+          <input name="latitude" type="number" min="-90" max="90" step="any" placeholder="Latitude" required />
+          <input name="longitude" type="number" min="-180" max="180" step="any" placeholder="Longitude" required />
+          <button type="submit">PLOT TRACK</button>
+        </form>
+        <div id="tracks" class="scroll-list empty-state">NO TRACKS REPORTED</div>
+      </section>
+      <section class="panel chat-panel">
+        <div class="panel-title"><span>TACTICAL CHAT</span><span id="message-count" class="count">0</span></div>
+        <div id="messages" class="messages empty-state">NO TRAFFIC</div>
+        <form id="chat-form"><input name="text" autocomplete="off" maxlength="2000" placeholder="Type message…" required/><button type="submit">SEND</button></form>
+      </section>
+      <section class="panel peers-panel">
+        <div class="panel-title"><span>MESH NODES</span><span id="peer-count" class="count">0</span></div>
+        <div id="peers" class="scroll-list empty-state">SEARCHING LOCAL NETWORK…</div>
+      </section>
+    </main>
+    <div id="toast"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
