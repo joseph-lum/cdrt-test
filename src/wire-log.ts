@@ -13,6 +13,9 @@ interface LogDetails {
   outcome?: string;
 }
 
+type TraceKind = "udp-datagram" | "websocket-message" | "http-request" |
+  "decoded-payload" | "socket-result" | "local-event";
+
 export class WireLogger {
   constructor(
     private readonly level: WireLogLevel,
@@ -28,6 +31,8 @@ export class WireLogger {
     const entry: Record<string, unknown> = {
       timestamp: new Date().toISOString(),
       localPeerId: this.localPeerId,
+      recordKind: traceKind(details),
+      networkScope: networkScope(details),
       ...details,
     };
     delete entry.raw;
@@ -37,7 +42,8 @@ export class WireLogger {
       const bytes = typeof details.raw === "string" ? Buffer.from(details.raw) : Buffer.from(details.raw);
       entry.rawBase64 = bytes.toString("base64");
     }
-    console.log(`[wire] ${JSON.stringify(entry)}`);
+    const prefix = traceKind(details) === "udp-datagram" ? "[comms]" : "[trace]";
+    console.log(`${prefix} ${JSON.stringify(entry)}`);
   }
 
   sync(direction: "tx" | "rx", remote: string | undefined, message: Uint8Array): void {
@@ -57,6 +63,29 @@ export class WireLogger {
       raw: message,
     });
   }
+}
+
+function traceKind(details: LogDetails): TraceKind {
+  if (details.channel === "client") return "websocket-message";
+  if (details.channel === "http") return "http-request";
+  if (details.event === "automerge.sync") return "decoded-payload";
+  if (details.event === "socket.send" || details.event === "udp.socket-send") return "socket-result";
+  if ((details.channel === "peer" && details.direction !== "event" && details.event.startsWith("udp.")) ||
+      (details.channel === "discovery" &&
+       ((details.direction === "tx" && details.event.startsWith("udp.")) ||
+        (details.direction === "rx" && details.event === "udp.datagram")))) {
+    return "udp-datagram";
+  }
+  return "local-event";
+}
+
+function networkScope(details: LogDetails): "lan" | "loopback" | "local-client" | "process" {
+  if (details.channel === "client") return "local-client";
+  if (traceKind(details) !== "udp-datagram" && details.channel !== "http") return "process";
+  const remote = details.remote ?? "";
+  return remote.includes("127.0.0.1") || remote.includes("::1") || details.event.includes("loopback")
+    ? "loopback"
+    : "lan";
 }
 
 function makeJsonSafe(value: unknown, includeBinary: boolean): unknown {

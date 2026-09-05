@@ -20,6 +20,7 @@ const wireLog = new WireLogger(config.wireLog, peerId);
 const store = new DocumentStore(config.dataDir, config.room, peerId);
 let document = await store.load();
 const browserClients = new Set<WebSocket>();
+let discovery: Discovery | undefined;
 
 const publicDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../public");
 const contentTypes: Record<string, string> = {
@@ -55,13 +56,13 @@ const server = createServer(async (request, response) => {
   }
 });
 
-const peerServer = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
 const browserServer = new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 * 1024 });
 
 const mesh = new Mesh({
   peerId,
   name: config.name,
   room: config.room,
+  host: config.host,
   port: config.port,
   getDocument: () => document,
   setDocument: (next) => {
@@ -69,10 +70,14 @@ const mesh = new Mesh({
     changed();
   },
   onStatus: broadcast,
+  onPeerUnavailable: () => {
+    discovery?.search();
+    connectConfiguredPeers();
+  },
   wireLog,
 });
 
-peerServer.on("connection", (socket) => mesh.accept(socket));
+await mesh.start();
 browserServer.on("connection", (socket) => {
   browserClients.add(socket);
   sendState(socket);
@@ -91,9 +96,8 @@ browserServer.on("connection", (socket) => {
 
 server.on("upgrade", (request, socket, head) => {
   const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-  const target = pathname === "/peer" ? peerServer : pathname === "/client" ? browserServer : undefined;
-  if (!target) return socket.destroy();
-  target.handleUpgrade(request, socket, head, (ws) => target.emit("connection", ws, request));
+  if (pathname !== "/client") return socket.destroy();
+  browserServer.handleUpgrade(request, socket, head, (ws) => browserServer.emit("connection", ws, request));
 });
 
 await new Promise<void>((resolve, reject) => {
@@ -101,13 +105,12 @@ await new Promise<void>((resolve, reject) => {
   server.listen(config.port, config.host, () => resolve());
 });
 
-let discovery: Discovery | undefined;
 if (!config.discoveryDisabled) {
   discovery = new Discovery(
     createAnnouncement(peerId, config.name, config.room, config.port),
     config.discoveryPort,
     config.multicastAddress,
-    (peer, address) => mesh.discovered(peer.peerId, address, peer.port),
+    (peer, address) => mesh.discovered(peer.peerId, peer.name, address, peer.port),
     wireLog,
   );
   try {
@@ -121,11 +124,13 @@ if (!config.discoveryDisabled) {
 function connectConfiguredPeers(): void {
   for (const peer of config.peers) {
     const [host, rawPort] = peer.split(":");
-    if (host && rawPort && Number.isInteger(Number(rawPort))) mesh.connect(host, Number(rawPort));
+    if (host && rawPort && Number.isInteger(Number(rawPort)) && !mesh.isConnectedTo(host, Number(rawPort))) {
+      mesh.connect(host, Number(rawPort));
+    }
   }
 }
 connectConfiguredPeers();
-const manualPeerTimer = config.peers.length ? setInterval(connectConfiguredPeers, 2_000) : undefined;
+const manualPeerTimer = config.peers.length ? setInterval(connectConfiguredPeers, 5_000) : undefined;
 
 console.log(`\nFieldMesh node “${config.name}”`);
 console.log(`  UI:        http://localhost:${config.port}`);
